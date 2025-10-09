@@ -1,197 +1,144 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
-void main() => runApp(const UpdateDebugApp());
+void main() {
+  runApp(const MyApp());
+}
 
-class UpdateDebugApp extends StatelessWidget {
-  const UpdateDebugApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter 更新流程调试',
-      home: const UpdateDebugPage(),
-      // 启用调试模式日志
-      debugShowCheckedModeBanner: true,
+      title: 'GlobalKey 状态保留测试（无路由）',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const HomePage(), // MyApp 仅返回 HomePage，不暴露 home 属性
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class UpdateDebugPage extends StatefulWidget {
-  const UpdateDebugPage({super.key});
+// 首页：通过条件渲染切换 PageA 和 PageB，持有 PageA 的 GlobalKey
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<UpdateDebugPage> createState() => _UpdateDebugPageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _UpdateDebugPageState extends State<UpdateDebugPage> {
-  int _counter = 0;
-  bool _toggle = false;
-  String _childKey = 'initial_key';
+class _HomePageState extends State<HomePage> {
+  bool _showPageA = true; // 控制显示 PageA 还是 PageB
+  // 持有 PageA 的 GlobalKey（公开 getter，供 PageA 访问）
+  final GlobalKey<PageAState> _pageAKey = GlobalKey<PageAState>();
 
-  // 打印日志（带时间戳）
-  void _log(String message) {
-    final time = DateTime.now().toString().split(' ')[1];
-    print('[$time] 父组件State: $message');
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _log('initState 调用（初始化状态）');
-  }
-
-  @override
-  void didUpdateWidget(covariant UpdateDebugPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _log('didUpdateWidget 调用（Widget实例更新）');
-    _log('  旧Widget哈希: ${oldWidget.hashCode}，新Widget哈希: ${widget.hashCode}');
-  }
-
-  @override
-  void dispose() {
-    _log('dispose 调用（组件销毁）');
-    super.dispose();
-  }
+  // 公开 getter：让子组件（PageA）能获取到这个 GlobalKey
+  GlobalKey<PageAState> get pageAKey => _pageAKey;
 
   @override
   Widget build(BuildContext context) {
-    _log('build 调用（开始构建Widget树）');
-    _log('  当前状态: counter=$_counter, toggle=$_toggle, childKey=$_childKey');
-
+    print('=== HomePage build（当前显示：${_showPageA ? "PageA" : "PageB"}） ===');
     return Scaffold(
-      appBar: AppBar(title: const Text('更新流程调试')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 状态展示
-            Text('计数器: $_counter', style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 8),
-            Text('开关状态: ${_toggle ? "开" : "关"}', style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-
-            // 子组件（Stateful）
-            _logWidget(
-              child: DebugStatefulChild(
-                key: ValueKey(_childKey), // 用key控制复用
-                data: '子组件数据: $_counter',
-                toggle: _toggle,
-              ),
-              name: 'DebugStatefulChild',
-            ),
-
-            // 子组件（Stateless）
-            _logWidget(
-              child: DebugStatelessChild(
-                data: '无状态子组件: ${_toggle ? "激活" : "未激活"}',
-              ),
-              name: 'DebugStatelessChild',
-            ),
-            const SizedBox(height: 20),
-
-            // 操作按钮
-            Wrap(
-              spacing: 10,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    _log('👉 点击计数器按钮，调用setState');
-                    setState(() => _counter++);
-                  },
-                  child: const Text('计数器+1'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    _log('👉 点击切换按钮，调用setState');
-                    setState(() => _toggle = !_toggle);
-                  },
-                  child: const Text('切换状态'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    _log('👉 点击改变子组件key，调用setState');
-                    setState(() => _childKey = 'new_key_${DateTime.now().second}');
-                  },
-                  child: const Text('改变子组件Key'),
-                ),
-              ],
-            ),
-          ],
-        ),
+      appBar: AppBar(title: const Text('首页（无路由）')),
+      body: Center(
+        // 条件渲染：切换 PageA 和 PageB
+        child: _showPageA
+            ? PageA(key: _pageAKey)  // 传入 GlobalKey
+            : const PageB(),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          print('--- 切换显示：${_showPageA ? "PageA → PageB" : "PageB → PageA"} ---');
+          setState(() => _showPageA = !_showPageA);
+        },
+        child: const Icon(Icons.swap_horiz),
       ),
     );
   }
-
-  // 包装子组件，打印构建日志
-  Widget _logWidget({required Widget child, required String name}) {
-    final widgetHash = child.hashCode;
-    _log('  构建$name: 哈希=$widgetHash');
-    return child;
-  }
 }
 
-// 调试用的Stateful子组件
-class DebugStatefulChild extends StatefulWidget {
-  final String data;
-  final bool toggle;
-
-  const DebugStatefulChild({
-    super.key,
-    required this.data,
-    required this.toggle,
-  });
+// PageA：通过 BuildContext 找到父组件，获取 GlobalKey
+class PageA extends StatefulWidget {
+  const PageA({super.key});
 
   @override
-  State<DebugStatefulChild> createState() => _DebugStatefulChildState();
+  State<PageA> createState() => PageAState();
 }
 
-class _DebugStatefulChildState extends State<DebugStatefulChild> {
-  int _internalCount = 0; // 子组件内部状态
+class PageAState extends State<PageA> {
+  final TextEditingController _inputController = TextEditingController();
+  String lastInput = ''; // 公开属性，供外部查看
 
-  void _log(String message) {
-    final time = DateTime.now().toString().split(' ')[1];
-    print('[$time] 子组件State: $message');
+  // 从父组件 _HomePageState 获取 GlobalKey（核心修正）
+  GlobalKey<PageAState> get _pageAKey {
+    // 通过 BuildContext 找到父组件 HomePage 的状态
+    final homeState = context.findAncestorStateOfType<_HomePageState>();
+    assert(homeState != null, "PageA 必须在 HomePage 内部使用");
+    return homeState!.pageAKey;
   }
 
   @override
   void initState() {
     super.initState();
-    _log('initState 调用（子组件初始化）');
+    print('=== PageAState initState（首次创建） ===');
+    print('PageAState 当前输入框内容：${_inputController.text}');
+    _inputController.addListener(() {
+      lastInput = _inputController.text;
+      print('--- PageA 输入变化：$lastInput ---');
+    });
   }
 
   @override
-  void didUpdateWidget(covariant DebugStatefulChild oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _log('didUpdateWidget 调用（子组件Widget更新）');
-    _log('  旧数据: ${oldWidget.data}, 新数据: ${widget.data}');
-    _log('  旧Widget哈希: ${oldWidget.hashCode}, 新Widget哈希: ${widget.hashCode}');
+  void activate() {
+    super.activate();
+    print('=== PageAState activate（Element 复用，恢复活跃） ===');
+    print('PageAState 复用后输入框内容：${_inputController.text}');
+  }
+
+  @override
+  void deactivate() {
+    super.deactivate();
+    print('=== PageAState deactivate（Element 失活，进入 inactive） ===');
+    print('PageAState 失活时输入框内容：${_inputController.text}');
   }
 
   @override
   void dispose() {
-    _log('dispose 调用（子组件销毁）');
+    _inputController.dispose();
+    print('=== PageAState dispose（State 卸载，资源释放） ===');
+    print('PageAState 卸载时输入框内容：$lastInput');
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    _log('build 调用（子组件构建）');
-    return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      color: widget.toggle ? Colors.blue[50] : Colors.grey[50],
+    print('=== PageA build ===');
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(widget.data, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 8),
-          Text('子组件内部计数: $_internalCount'),
+          const Text('我是 PageA（带 GlobalKey）', style: TextStyle(fontSize: 20)),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _inputController,
+            decoration: const InputDecoration(
+              labelText: '输入内容（验证状态保留）',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 20),
           ElevatedButton(
             onPressed: () {
-              _log('👉 子组件内部按钮点击，调用setState');
-              setState(() => _internalCount++);
+              // 检查 GlobalKey 状态（通过父组件获取的 Key）
+              final hasElement = _pageAKey.currentContext != null;
+              final currentState = _pageAKey.currentState;
+              print('--- PageA 内部检查 Key 状态 ---');
+              print('Element 是否存在：$hasElement');
+              print('State 是否存在：${currentState != null}');
+              print('当前输入内容：${currentState?.lastInput ?? "无"}');
             },
-            child: const Text('子组件计数+1'),
+            child: const Text('检查 Key 状态'),
           ),
         ],
       ),
@@ -199,21 +146,23 @@ class _DebugStatefulChildState extends State<DebugStatefulChild> {
   }
 }
 
-// 调试用的Stateless子组件
-class DebugStatelessChild extends StatelessWidget {
-  final String data;
-
-  const DebugStatelessChild({super.key, required this.data});
+// PageB：普通无状态组件
+class PageB extends StatelessWidget {
+  const PageB({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final time = DateTime.now().toString().split(' ')[1];
-    print('[$time] 无状态子组件: build 调用（哈希=${hashCode}）');
-    return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      color: Colors.green[50],
-      child: Text(data, style: const TextStyle(fontSize: 16)),
+    print('=== PageB build ===');
+    return const Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('我是 PageB（无 GlobalKey）', style: TextStyle(fontSize: 20, color: Colors.red)),
+          SizedBox(height: 20),
+          Text('切换回 PageA 可验证状态是否保留', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
     );
   }
 }
